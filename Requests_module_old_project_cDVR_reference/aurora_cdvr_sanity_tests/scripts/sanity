@@ -1,0 +1,294 @@
+#!/usr/bin/python
+
+# Based on work done by Joby Bett - Cisco 2015
+#
+# Ken Shaffer - Cisco Systems Inc, 2015
+
+import os
+import sys
+sys.stderr = sys.stdout
+import re
+from time import tzset, gmtime, strftime
+from pprint import pprint
+import subprocess
+import time
+import mypaths
+from readYamlConfig import *
+from jsonReadWrite import JsonReadWrite
+
+other_scripts = "sanity_scripts"
+# Find our current dir and set our base dir
+abspath = os.path.abspath(__file__)
+scriptName = os.path.basename(__file__)
+scriptDir = os.path.dirname(abspath)
+scriptDir += '/'
+
+# find the scripts portion of the path
+# TODO potential bug if /scripts/ exists more than once in path
+expected_dir = "/scripts/"
+index = scriptDir.find(expected_dir)
+if index < 0:
+    print "unexpected directory layout"
+    exit(1)
+scriptDir = scriptDir[:index+len(expected_dir)]
+
+# Trim off the scripts dir
+baseDir, null = os.path.split(scriptDir)
+
+# set up TZ
+os.environ['TZ'] = 'UTC'
+tzset()
+
+# get timestamp
+def ts():
+    return strftime("%Y/%m/%d %H:%M:%S %Z",gmtime())
+
+test_name_header = "Test Name"
+test_name_width = 50
+test_return_code_header = "Return Code"
+test_return_code_width = len(test_return_code_header)
+test_format_string = '{0:<'+str(test_name_width)+'} {1:^'+str(test_return_code_width)+'}'
+prefix_on_log_errors = 'XX' * 25
+suffix_on_log_errors = 'XX' * 25
+
+# helper function to print failing test and code
+def test_summary_helper(key_value):
+    test_name, return_code = key_value
+    if return_code != 0:
+        print test_format_string.format(test_name, return_code)
+
+# valid arg count?
+sa = sys.argv
+lsa = len(sys.argv)
+if lsa != 3  and lsa != 2:
+    print "Usage: [ python ] %s <lab name> [ <ip_override.yaml> ] " % scriptName
+    print "Example: [ python ] %s lwr_integration deployed_vms.yaml" % scriptName
+    print "         [ python ] %s lwr_integration " % scriptName
+    print "  where lwr_integration is a directory under ../config expected to contain ips.yaml"
+    print "        deployed_vms.yaml is an optional yaml file of components and their hosts/ips"
+    print "        similar to ips.yaml in form (see config/README file for example)"
+    print
+    print " the content of the 2nd arg if provided overrides the same content if present "
+    print " in content of 1st arg"
+    sys.exit(1)
+
+labName = sa[1]
+vmInfo = None
+if lsa > 2:
+    vmInfo = sa[2]
+
+conf_str = labName
+if vmInfo != None:
+    conf_str = conf_str + " " + vmInfo
+cfg = readYAMLConfigs(labName, vmInfo)
+if cfg:
+    # store our args in config
+    cfg['LABNAME'] = labName
+    cfg['EXTRACONF'] = vmInfo
+    description = cfg['lab-description']
+    # get to scripts directory for git repo check
+    cwd = os.getcwd()
+    os.chdir(scriptDir)
+
+    # get git repo used and store in config
+    gitrepos = subprocess.Popen(['git','remote','-v'], stdout=subprocess.PIPE).communicate()[0]
+    gitfetch = gitrepos.splitlines()[0]
+    cfg['GITREPO'] = gitfetch
+
+    # get last commit hash and store in config
+    lastcommit = subprocess.Popen(['git','log',"--pretty=format:'%H'",'-n','1'], stdout=subprocess.PIPE).communicate()[0]
+    cfg['GITLASTCOMMIT'] = lastcommit[1:12]
+
+    # restore to previous directory
+    os.chdir(cwd)
+
+    # adjust prefix
+    prefix = cfg['sanity']['household_prefix'] + strftime("_%d%H_", gmtime())
+    cfg['sanity']['household_prefix'] = prefix
+
+    ############################################# V2 <-> V3 COMPATIBLE CHANGES ############################################################
+    if cfg['pps']['api'] == 'v3':other_scripts = "sanity_scripts_ppsv3"
+    #######################################################################################################################################
+
+    # print config
+    print
+    print '\n' + ts(),'#' * 30, "C O N F I G U R A T I O N", '#' * 30
+    print "\nThe following configuration is being used (%s):\n" % conf_str
+    pprint(cfg)
+    print
+else:
+    print 'Error reading configs'
+    sys.exit(1)
+
+def run_tests():
+    # see if stopping on first failure or not
+    try:
+        stop_on_first = cfg['sanity']['stop_on_first_failure']
+    except:
+        stop_on_first = True
+
+    test_summary = {}
+
+    ######################################### V2 <-> V3 COMPATIBLE CHANGES #########################################################
+
+    if cfg['pps']['api'] == 'v3':
+        tests = ["sanity_create_planner"]
+    else:
+        tests = [ "sanity_create_household" ]       # need households for each test
+
+    ################################################################################################################################
+
+    # rather than listing each test in the tests list, let's look for
+    # all sanity_.*.py files and use those, but ensure the create household
+    # is first
+    files = os.listdir(scriptDir)
+    files.extend(os.listdir(scriptDir + '/' + other_scripts))
+    sanityre = re.compile("^sanity_.*\.py$")
+    files = filter(sanityre.search, files)
+
+    ######################################## V2 <-> V3 COMPATIBLE CHANGES ###########################################################
+    # sanity_create_household always first
+    if cfg['pps']['api'] == 'v3':
+        files.remove("sanity_create_planner.py")
+    else:
+        files.remove('sanity_create_household.py')
+    #################################################################################################################################
+
+    files.sort()
+
+
+    # ftn to remove the .py extension from filenames
+    remove_extension = lambda f: os.path.splitext(f)[0]
+
+    # run the remove_extension ftn for every file to get module name to import
+    modules = map(remove_extension, files)
+
+    # add the modules to tests to run
+    tests.extend(modules)
+
+    # asked to delete afterwards, but FYI will need to beware that if simultaneous
+    # test runs occur to same lab that errors could occur.
+    #
+    # COULD USE DIFFERENT PREFIX DURING DEVELOPMENT.
+
+    ##################################### V2 <-> V3 COMPATIBLE CHANGES ################################################################
+    if cfg['pps']['api'] == 'v3':tests.append("sanity_delete_planner")
+    else:tests.append("delete_household")
+    ###################################################################################################################################
+    rc_summary = 0
+    any_error = 0
+
+
+    # now run each test
+    for test_name in tests:
+        print '\n' + ts(),'#' * 30, "STARTED : ",test_name, '#' * 30
+
+        try:
+            # import a test module
+            thistest = __import__(test_name)
+
+            # run the required doit ftn passing in our cfg
+            return_TIMS_list = thistest.doit(cfg)
+            return_code = return_TIMS_list[3]
+            test_summary[test_name] = return_code
+        except (TypeError, IndexError) as err:
+            return_code = 1
+            test_summary[test_name] = "Fix Script"
+            print "\nProblem with script, it is not returning expected TIMs list"
+        except Exception as err:
+            return_code = 1
+            test_summary[test_name] = "Fix Script"
+            print "\nProblem with script (uncaught exception): {0}\n{1!r}\n".format(type(err), err)
+
+        rc_summary += int(abs(return_code))
+        if return_code != 0:
+            if return_code == 1:
+                any_error = 1   # overall response will then be error
+                print prefix_on_log_errors, '  ^ ^ ^ ^ ^  ', suffix_on_log_errors
+                print prefix_on_log_errors, '  E R R O R  ', suffix_on_log_errors
+            else:
+                print prefix_on_log_errors, '  ^ ^ ^ ^ ^ ^ ^  ', suffix_on_log_errors
+                print prefix_on_log_errors, '  W A R N I N G  ', suffix_on_log_errors
+            if stop_on_first == True and return_code == 1:
+                # attempt delete of households anyway
+                test_name = "delete_household"
+                print '#' * 30, test_name, '#' * 30
+
+                
+                try:
+                    # import a test module
+                    thistest = __import__(test_name)
+                    thistest.doit(cfg)
+                except Exception as err:
+                    test_summary[test_name] = "Fix Script"
+                    print "\nProblem with script (uncaught exception): {0}\n{1!r}\n".format(type(err), err)
+                print '\n' + ts(),"done"
+                return return_code
+        print '\n' + ts(),'#' * 30, "ENDED : ",test_name, '#' * 30
+		
+    print '\n' + ts(),"done"
+    if rc_summary != 0:
+        print
+        print '#' * 30, "  Summary  ", '#' * 30
+        print
+        print "The following scripts returned non-zero exit codes:\n"
+        print test_format_string.format(test_name_header, test_return_code_header)
+        print test_format_string.format('-' * test_name_width, '-' * test_return_code_width)
+        map(test_summary_helper,(test_summary.items()))
+        if any_error == 1:
+            return 1
+    return 0
+
+# set up for TIMs reporting
+# TODO create library, TIMs2Json, for this
+filename =  cfg['test_results']['filename']
+data = {
+    "config": {
+        "labname" : labName,
+        "extraconf" : str(vmInfo) ,
+        "gitrepo" : gitfetch,
+        "gitlastcommit" :  lastcommit[1:12],
+        "description" : description
+       }
+   }
+
+sanityResults = JsonReadWrite(filename)
+sanityResults.writeDictJson(data)
+
+data = {
+    "testsuite": {
+        scriptName: []
+    }
+}
+sanityResults.writeDictJson(data)
+
+# run and time tests
+start_time = time.time()
+rc = run_tests()
+end_time = time.time()
+
+# write TIMs results
+time_value = end_time - start_time
+time_value = round(time_value , 6 )
+time_value = str(time_value)
+if rc == 0:
+    status = "PASS"
+    message = "Sanity tests PASSED"
+else:
+    status = "FAIL"
+    message = "Sanity tests FAILED "
+
+results = {
+        "CF": "",
+        "I": "Core DVR Functionality",
+        "MF": "",
+        "US": "Sanity tests",
+        "message": message,
+        "name": "sanity",
+        "status": status,
+        "time": time_value
+    }
+
+sanityResults.appendListToKey('testsuite:' + scriptName, results)
+
+exit( rc )

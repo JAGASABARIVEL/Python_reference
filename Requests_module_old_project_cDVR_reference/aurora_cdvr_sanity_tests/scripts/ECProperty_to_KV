@@ -1,0 +1,44 @@
+#!/usr/bin/python
+
+'''
+Parse Electric Commander getProperties response and output key=value lines
+
+Usage: ECProperty_to_KV ECPropertiesFiles > some_file
+
+Ken Shaffer
+'''
+
+import fileinput
+import xml.etree.ElementTree as ET
+
+PROP_SHEET_PROP='propertySheet/property'
+
+def propertyValue(property):
+    name = ""
+    propName = property.find('propertyName')
+    if propName is not None:
+        name = propName.text
+    value = property.find('value')
+    if value is not None:
+        yield( name + '=' + value.text)
+    # no value seen, so must be another propertySheet containing sub value
+    for propertyFromSheet in property.findall(PROP_SHEET_PROP):
+        for kv in propertyValue(propertyFromSheet):
+            yield( name + '/' + kv )
+
+RC=0
+try:
+    xmlin = ""
+    for line in fileinput.input():
+        xmlin += line
+
+    root = ET.fromstring(xmlin)
+
+    for property in root.findall(PROP_SHEET_PROP):
+        for kv in propertyValue(property):
+            print kv
+except:
+    print 'ERROR_MSG="Unable to parse the EC properties"'
+    RC=1
+
+exit(RC)
