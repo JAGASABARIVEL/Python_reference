@@ -1,0 +1,137 @@
+#!/bin/bash
+
+LOGROTATE_FILE="/etc/logrotate.d/uchiwa"
+LOGROTATE_FILE_BKP="${LOGROTATE_FILE}_BKP"
+UCHIWA_LOG_FILE="/var/log/uchiwa.log"
+
+
+function check_permission {
+    userName=$(whoami)
+    if [ "$userName" != "root" ]
+    then
+        echo "SKIPPING: Run this script as root user / sudo privilege"
+        exit 2
+    fi
+}
+
+function check_if_patch_applicable {
+        if [ -e $UCHIWA_LOG_FILE ]
+        then
+            echo "INFO: This patch is applicable"
+        else
+            echo "SKIPPING: This patch is applicable only for uchiwa server"
+            exit 2
+        fi
+}
+
+function create_logrotate_file {
+    /bin/cat <<EOM >$LOGROTATE_FILE
+$UCHIWA_LOG_FILE {
+    daily
+    rotate 5
+    size 10M
+    copytruncate
+    compress
+    delaycompress
+    missingok
+    notifempty
+}
+EOM
+
+    ret="$?"
+    if [ "$ret" -ne 0 ]
+    then
+        echo "ERROR: patch failed"
+        exit 1
+    fi      
+}
+
+function main_rollback {
+    if [ -e $LOGROTATE_FILE ]
+    then
+        \rm $LOGROTATE_FILE
+    else
+        echo "SKIPPING: rollback is not needed as the patch is not applied"
+        exit 2
+    fi
+    ret="$?"
+    if [ "$ret" -ne 0 ]
+    then
+        echo "ERROR: rollback failed"
+        exit 1
+    fi      
+}
+
+function start {
+    check_permission
+    check_if_patch_applicable
+}
+
+function main_apply {
+    create_logrotate_file
+}
+
+function end_apply {
+    echo "SUCCESS: patch applied successfully"
+}
+
+function end_rollback {
+    echo "SUCCESS: rollback completed successfully"
+}
+
+function apply {
+    start
+    main_apply
+    end_apply
+}
+
+function rollback {
+    start
+    main_rollback
+    end_rollback
+}
+
+function verify {
+    if [ ! -e $LOGROTATE_FILE ]
+    then
+        echo "SKIPPING: verification cannot be done as the patch is not applied"
+        exit 2
+    fi 
+    /usr/sbin/logrotate -d "$LOGROTATE_FILE"
+    ret="$?"
+    if [ "$ret" -ne 0 ]
+    then
+        echo "ERROR: applied patch is not working as expected"
+        exit 1
+    else
+        echo "INFO: applied patch is working as expected"
+    fi      
+}
+
+function usage {
+   echo "provide valid argument"
+   echo "supported argument: <apply | verify | rollback>"
+}
+
+### Main ###
+if [ "$#" -eq 0 ]
+then
+   usage
+   exit 1
+fi
+
+CMD="$1"
+
+if [ "$CMD" == "apply" ]
+then
+    apply
+elif [ "$CMD" == "rollback" ]
+then
+    rollback
+elif [ "$CMD" == "verify" ]
+then
+    verify
+else
+    usage
+    exit 1
+fi

@@ -1,0 +1,68 @@
+{
+    "testsuite": {
+        "feature": [
+            {
+                "status": "PASS", 
+                "MF": "", 
+                "name": "feature_test_default_configurations", 
+                "I": "Core DVR Functionality", 
+                "CF": "", 
+                "US": "US86704", 
+                "time": "0.647489", 
+                "message": "", 
+                "TC": "Test_Default_Configuration"
+            }, 
+            {
+                "status": "PASS", 
+                "MF": "", 
+                "name": "feature_test_default_configurations", 
+                "I": "Core DVR Functionality", 
+                "CF": "", 
+                "US": "US86704", 
+                "time": "0.643115", 
+                "message": "", 
+                "TC": "Test_Default_Configuration"
+            }, 
+            {
+                "status": "PASS", 
+                "MF": "", 
+                "name": "basic_test_default_configurations", 
+                "I": "Core DVR Functionality", 
+                "CF": "", 
+                "US": "US86704", 
+                "time": "0.899832", 
+                "message": "", 
+                "TC": "Test_Default_Configuration"
+            }, 
+            {
+                "status": "PASS", 
+                "MF": "", 
+                "name": "feature_test_default_configurations", 
+                "I": "Core DVR Functionality", 
+                "CF": "", 
+                "US": "US86704", 
+                "time": "0.6946", 
+                "message": "", 
+                "TC": "Test_Default_Configuration"
+            }, 
+            {
+                "status": "PASS", 
+                "MF": "", 
+                "name": "feature_test_default_configurations", 
+                "time": "0.674679", 
+                "I": "Core DVR Functionality", 
+                "message": "", 
+                "CF": "", 
+                "US": "US86704", 
+                "TC": "Test_Default_Configuration"
+            }
+        ]
+    }, 
+    "config": {
+        "gitlastcommit": "515f1ed8818", 
+        "labname": "chn_nfr", 
+        "gitrepo": "origin\thttps://jkarunan@bitbucket-eng-rtp1.cisco.com/bitbucket/scm/ihdev/aurora_cdvr_sanity_tests.git (fetch)", 
+        "extraconf": "None", 
+        "description": "NFR and tsung performance lab"
+    }
+}

@@ -1,0 +1,2 @@
+#!/bin/sh
+rm -r /home/Jagasabarivel/Control_Plane_Jobs/cdvr_automation_log/*

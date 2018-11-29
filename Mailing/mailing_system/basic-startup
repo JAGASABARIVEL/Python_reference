@@ -1,0 +1,3 @@
+#!/bin/sh
+#python /home/Jagasabarivel/Control_Plane/Push/aurora_cdvr_sanity_tests/scripts/basic-feature chn_nfr
+python /home/Jagasabarivel/Control_Plane/PRODUCTION/aurora_cdvr_sanity_tests/scripts/basic-feature chn_nfr

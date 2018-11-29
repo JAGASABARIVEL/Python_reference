@@ -1,0 +1,20 @@
+{
+    "testsuite": {
+        "engine": [
+            {
+                "status": "FAIL", 
+                "MF": "", 
+                "name": "sanity", 
+                "time": "0.446773", 
+                "I": "Core DVR Functionality", 
+                "message": "Sanity tests FAILED ", 
+                "CF": "", 
+                "US": "Sanity tests"
+            }
+        ]
+    }, 
+    "config": {
+        "labname": "chn_nfr", 
+        "extraconf": "None"
+    }
+}
