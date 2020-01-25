@@ -181,7 +181,7 @@ def doit_wrapper(cfg, printflg=False):
                  print "Deleting the Service for the Household is successful, will wait for 1 minute before re enabling the services."                     
                  time.sleep(60)
             else:
-                 message = "Testtcase Failed: Unable to Delete the Household Enabledservices"
+                 message = "Testcase Failed: Unable to Delete the Household Enabledservices"
                  print message
                  tims_dict = update_tims_data(
                            tims_dict, 1, message, ["TC1647"])
