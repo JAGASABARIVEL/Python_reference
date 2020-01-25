@@ -178,7 +178,7 @@ def doit_wrapper(cfg, printflg=False):
                     if deleteserviceresult == "PASS":
                         print "Deleting the Service for the Household is successful"
                     else:
-                        message = "Testtcase Failed: Unable to Delete the Household Enabledservices"
+                        message = "Testcase Failed: Unable to Delete the Household Enabledservices"
                         print message
                         tims_dict = update_tims_data(
                             tims_dict, 1, message, ["TC923"])
